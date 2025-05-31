@@ -1,41 +1,73 @@
+using NetCoreCase.API.Extensions;
+using NetCoreCase.API.Middleware;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Add services to the container
+builder.Services.AddApiServices();
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddMapsterConfiguration();
+
+// Add logging
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NetCore CMS API v1");
+        c.RoutePrefix = string.Empty; // Swagger UI'ı root'ta açar
+        c.DocumentTitle = "NetCore CMS API";
+        c.DefaultModelsExpandDepth(-1); // Model'leri kapalı gösterir
+    });
 }
 
+// Security headers
+app.UseHsts();
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+// CORS
+app.UseCors("AllowAll");
 
-app.MapGet("/weatherforecast", () =>
+// Custom middleware
+app.UseMiddleware<ErrorHandlingMiddleware>();
+
+// Authentication & Authorization (şimdilik yok)
+// app.UseAuthentication();
+// app.UseAuthorization();
+
+// Controllers
+app.MapControllers();
+
+// Health check endpoint
+app.MapGet("/health", () => new
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    Status = "Healthy",
+    Timestamp = DateTime.UtcNow,
+    Version = "1.0.0",
+    Environment = app.Environment.EnvironmentName
+});
+
+// API bilgi endpoint'i
+app.MapGet("/api/info", () => new
+{
+    Title = "NetCore CMS API",
+    Version = "1.0.0",
+    Description = "İçerik Yönetim Sistemi API'si - Clean Architecture implementasyonu",
+    Documentation = "/swagger",
+    Endpoints = new
+    {
+        Users = "/api/users",
+        Categories = "/api/categories",
+        Contents = "/api/contents",
+        Health = "/health"
+    }
+});
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
